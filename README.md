@@ -27,7 +27,7 @@ BEUTI_daily.csv. Database containing BEUTI. Available on Jacox et al. (2018): ht
 bco_dmo_pom.csv. Database containing POC and PON data. Available on Gerace et al. (2025): https://www.bco-dmo.org/dataset/564351.
 
 # Folder: Scripts
-Choreno_Parra_etal_script_oilspill_AMPtk.sh. This script contains code to process raw ITS2 sequences obtained from surface seawater samples collected after the Orange County oil spill. Sequences are available from NCBI’s SRA under BioProject ID PRJNA1344880.
+Choreno_Parra_etal_script_oilspill_AMPtk.sh. This script contains code to process raw ITS2 sequences obtained from surface seawater samples collected after the Orange County oil spill. Sequences are available from NCBI’s SRA under BioProject ID PRJNA1344880: https://www.ncbi.nlm.nih.gov/bioproject/PRJNA1344880/.
 
 Choreno_Parra_etal_script_oilspill_Diversity.R. This script contains R code for the analysis of alpha (richness) and beta diversity, trend analysis, comparison of relative abundances of genera, and analysis of indicator OTUs. Use with Spreadsheet_S1 and Spreadsheet_S2.
 
