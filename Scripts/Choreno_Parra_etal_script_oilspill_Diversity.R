@@ -441,8 +441,554 @@ plot(Figure3)
 
 
 
+#### 8. Relative abundance of Phyla #####
 
-#### 8. Relative abundance of genera #####
+# Relative abundance for each OTU at each sample
+
+Phylum_abundance <- marine_physeq_rar %>%
+  tax_glom(taxrank = "Phylum", NArm = FALSE) %>%
+  transform_sample_counts(function(x) x / sum(x) * 100) %>%
+  psmelt() %>%
+  mutate(Phylum = ifelse(is.na(Phylum) | Phylum == "", "Unassigned", Phylum)) %>%
+  select(Sample, Phylum, Abundance, oiling_degree, time_days_categoric, sample_point)
+
+
+# Make sure each sample sum 100%
+Phylum_abundance %>%
+  group_by(Sample) %>%
+  summarize(total_abundance = sum(Abundance)) %>%
+  arrange(desc(abs(total_abundance - 1)))
+
+
+##### 8.1. Per oiling degree #####
+# Mean relative abundance of each Phylum per oiling degree
+
+# Sum relative abundances of all the OTUs of the same Phylum in each sample for each oiling 
+Phylum_mean_o <- Phylum_abundance %>%  
+  group_by(Phylum, Sample, oiling_degree) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(oiling_degree)
+
+#Summarizing
+Phylum_mean_o <- Phylum_mean_o %>%
+  group_by(Phylum, oiling_degree) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                           
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(oiling_degree) 
+
+
+#Making sure abundances of each oiling level sum 100%
+Phylum_mean_o %>%
+  group_by(oiling_degree) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(oiling_degree)  
+
+# Table for mean relative abundance of each Phylum per oiling degree: 
+Phylum_mean_o
+
+
+##### 8.2. Per time #####
+# Mean relative abundance of each Phylum per time
+
+# Sum relative abundances of all the OTUs of the same Phylum in each sample for each time
+Phylum_mean_t <- Phylum_abundance %>%  
+  group_by(Phylum, Sample, time_days_categoric) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(time_days_categoric)
+
+# Summarizing
+Phylum_mean_t <- Phylum_mean_t %>%
+  group_by(Phylum, time_days_categoric) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>%
+  group_by(time_days_categoric) 
+
+# Making sure abundances within each time sum 100% 
+Phylum_mean_t %>%
+  group_by(time_days_categoric) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(time_days_categoric)
+
+# Table for mean relative abundance of each Phylum per time:
+Phylum_mean_t
+
+
+##### 8.3. Per oiling x time #####
+# Mean relative abundance of each genus per oiling degree x time
+
+# Sum relative abundances of all the OTUs of the same Phylum in each sample for each oiling × time
+Phylum_mean_ot <- Phylum_abundance %>%  
+  group_by(Phylum, Sample, oiling_degree, time_days_categoric) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(oiling_degree, time_days_categoric) #%>%
+
+#Calculating
+Phylum_mean_ot <- Phylum_mean_ot %>%
+  group_by(Phylum, oiling_degree, time_days_categoric) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(oiling_degree, time_days_categoric) 
+
+# Making sure abundances within each oiling × time sum 100% 
+Phylum_mean_ot %>%
+  group_by(time_days_categoric, oiling_degree) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(time_days_categoric, oiling_degree)  
+
+# Table for mean relative abundance of each Phylum per oiling degree x time:  
+Phylum_mean_ot
+
+
+##### 8.4. Overall #####
+# Mean relative abundance of each genus per oiling degree x time
+
+# Sum relative abundances of all the OTUs of the same Phylum in each sample for each oiling and time
+Phylum_mean_all <- Phylum_abundance %>%  
+  group_by(Phylum, Sample) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(Phylum) #%>%
+
+# Summarizing
+Phylum_mean_all <- Phylum_mean_all %>%
+  group_by(Phylum) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(Phylum) 
+
+# Making sure abundances within each oiling × time sum 100%
+sum(Phylum_mean_all$mean_abundance)
+
+# Table for mean relative abundance of each Phylum overall:  
+Phylum_mean_all
+
+
+##### 8.5. Mixed effects models #####
+
+# Ranking abundances in long format
+
+# Collapse to one row per Sample x Phylum
+Phylum_abundance_collapsed <- Phylum_abundance %>%
+  group_by(Sample, Phylum) %>%
+  summarise(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop")
+
+# Merge metadata
+sample_meta_Phylum <- Phylum_abundance %>%
+  distinct(Sample, oiling_degree, time_days_categoric, sample_point)
+
+Phylum_abundance_collapsed <- Phylum_abundance_collapsed %>%
+  left_join(sample_meta_Phylum, by = "Sample")
+
+# Rank within each sample (lowest = 1, highest = max)
+Phylum_ranked_abundance <- Phylum_abundance_collapsed %>%
+  group_by(Sample) %>%
+  mutate(Abundance_rank = rank(Abundance, ties.method = "average")) %>%
+  ungroup() %>%
+  mutate(
+    sample_point = as.factor(sample_point),
+    time_days_categoric = as.factor(time_days_categoric),
+    oiling_degree = as.factor(oiling_degree),
+    Phylum = as.factor(Phylum))
+
+###### 8.5.1. Model Genus x time x oiling ######
+
+# Fit the model
+model_ranked_Phylum <- nlme::lme(
+  Abundance_rank ~ Phylum * oiling_degree * time_days_categoric,
+  random = ~1 | sample_point/time_days_categoric,
+  data   = Phylum_ranked_abundance,
+  method = "REML")
+
+# ANOVA table
+anova(model_ranked_Phylum)
+
+
+###### 8.5.2. Pairwise comparisons ######
+
+# Differences among taxa
+emmeans::emmeans(model_ranked_Phylum, pairwise ~ Phylum, adjust = "tukey")
+
+
+##### 8.6. Figure S1 #####
+
+# Top taxa from mean abundance table
+Phylum_mean_ot_top <- Phylum_mean_ot %>%
+  group_by(oiling_degree, time_days_categoric) %>%
+  mutate(
+    Phylum = ifelse(
+      row_number(desc(mean_abundance)) <= 6,
+      as.character(Phylum),
+      "Others")) %>%
+  ungroup() %>%
+  mutate(
+    Phylum = ifelse(is.na(Phylum) | Phylum == "", "Unassigned", Phylum),
+    oiling_degree = factor(oiling_degree, levels = c("Very_light", "Light")))
+
+# Sum after assigning low-abundance taxa to Others
+Phylum_mean_ot_top2 <- Phylum_mean_ot_top %>%
+  group_by(Phylum, oiling_degree, time_days_categoric) %>%
+  summarize(Abundance = sum(mean_abundance), .groups = "drop") %>%
+  complete(Phylum, time_days_categoric, oiling_degree, fill = list(Abundance = 0))
+
+# Colors
+marine_Phylum_colors <- c(
+  "Others" = "black",
+  "Unassigned" = "gray50",
+  "Aphelidiomycota" = "#F46D43",
+  "Ascomycota" = "#FEE08B",
+  "Basidiobolomycota" = "#6288DD",
+  "Basidiomycota" = "#5E4FA2",
+  "Chytridiomycota" = "#66C2A5",
+  "Glomeromycota" = "#ABDDA4",
+  "Kickxellomycota" = "#D53E4F",
+  "Monoblepharomycota" = "#3288BD",
+  "Mortierellomycota" = "#FFFFBF",
+  "Mucoromycota" = "#FDAE61",
+  "Rozellomycota" = "#9E0142")
+
+# Reordering 
+Phylum_mean_ot_top2$Phylum <- factor(
+  Phylum_mean_ot_top2$Phylum,
+  levels = c(
+    "Unassigned", "Others",
+    unique(Phylum_mean_ot_top2$Phylum[
+      !Phylum_mean_ot_top2$Phylum %in% c("Unassigned", "Others")])))
+
+# Alluvial plot
+figureS1 <- ggplot(Phylum_mean_ot_top2, aes(alluvium = Phylum, x = time_days_categoric, stratum = Phylum, y = Abundance)) +
+  geom_alluvium(aes(fill = Phylum), color = "black", alpha = 1, size = 0.1, width = 1/10,
+    knot.pos = 1/4, curve_type = "xspline", decreasing = NA) +
+  facet_grid(
+    . ~ oiling_degree,
+    labeller = as_labeller(c("Light" = "Light oiling",
+                             "Very_light" = "Very light oiling"))) +
+  scale_fill_manual(values = marine_Phylum_colors) +
+  theme_bw() +
+  xlab("Time after oil spill") +
+  scale_x_discrete(limits = c("18d", "34d", "49d", "66d")) +
+  labs(y = "Mean relative abundance (%)", fill = "Phylum") +
+  geom_segment(aes(x = "34d", xend = "34d", y = 0, yend = 100),
+               linetype = "dashed", color = "black", size = 0.05) +
+  geom_segment(aes(x = "49d", xend = "49d", y = 0, yend = 100),
+               linetype = "dashed", color = "black", size = 0.05) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 11, face = "bold"),
+    axis.text.y = element_text(size = 8),
+    axis.text.x = element_text(size = 11),
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text.x = element_text(size = 11, color = "black", face = "bold"),
+    strip.background = element_blank(),
+    legend.key.size = unit(0.35, "cm"))
+
+plot(figureS1)
+
+
+
+#### 9. Relative abundance of Classes #####
+
+# Relative abundance for each OTU at each sample
+
+Class_abundance <- marine_physeq_rar %>%
+  tax_glom(taxrank = "Class", NArm = FALSE) %>%
+  transform_sample_counts(function(x) x / sum(x) * 100) %>%
+  psmelt() %>%
+  mutate(Class = ifelse(is.na(Class) | Class == "", "Unassigned", Class)) %>%
+  select(Sample, Class, Abundance, oiling_degree, time_days_categoric, sample_point)
+
+
+# Make sure each sample sum 100%
+Class_abundance %>%
+  group_by(Sample) %>%
+  summarize(total_abundance = sum(Abundance)) %>%
+  arrange(desc(abs(total_abundance - 1)))
+
+
+##### 9.1. Per oiling degree #####
+# Mean relative abundance of each Class per oiling degree
+
+# Sum relative abundances of all the OTUs of the same Class in each sample for each oiling 
+Class_mean_o <- Class_abundance %>%  
+  group_by(Class, Sample, oiling_degree) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(oiling_degree)
+
+#Summarizing
+Class_mean_o <- Class_mean_o %>%
+  group_by(Class, oiling_degree) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                           
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(oiling_degree) 
+
+
+#Making sure abundances of each oiling level sum 100%
+Class_mean_o %>%
+  group_by(oiling_degree) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(oiling_degree)  
+
+# Table for mean relative abundance of each Class per oiling degree: 
+Class_mean_o
+
+
+##### 9.2. Per time #####
+# Mean relative abundance of each Class per time
+
+# Sum relative abundances of all the OTUs of the same Class in each sample for each time
+Class_mean_t <- Class_abundance %>%  
+  group_by(Class, Sample, time_days_categoric) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(time_days_categoric)
+
+# Summarizing
+Class_mean_t <- Class_mean_t %>%
+  group_by(Class, time_days_categoric) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>%
+  group_by(time_days_categoric) 
+
+# Making sure abundances within each time sum 100% 
+Class_mean_t %>%
+  group_by(time_days_categoric) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(time_days_categoric)
+
+# Table for mean relative abundance of each Class per time:
+Class_mean_t
+
+
+##### 9.3. Per oiling x time #####
+# Mean relative abundance of each Class per oiling degree x time
+
+# Sum relative abundances of all the OTUs of the same Class in each sample for each oiling × time
+Class_mean_ot <- Class_abundance %>%  
+  group_by(Class, Sample, oiling_degree, time_days_categoric) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(oiling_degree, time_days_categoric)
+
+#Calculating
+Class_mean_ot <- Class_mean_ot %>%
+  group_by(Class, oiling_degree, time_days_categoric) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(oiling_degree, time_days_categoric) 
+
+# Making sure abundances within each oiling × time sum 100% 
+Class_mean_ot %>%
+  group_by(time_days_categoric, oiling_degree) %>%
+  summarise(total_abundance = sum(mean_abundance)) %>%
+  arrange(time_days_categoric, oiling_degree)  
+
+# Table for mean relative abundance of each Class per oiling degree x time:  
+Class_mean_ot
+
+
+##### 9.4. Overall #####
+# Mean relative abundance of each Class overall
+
+# Sum relative abundances of all the OTUs of the same Class in each sample for each oiling and time
+Class_mean_all <- Class_abundance %>%  
+  group_by(Class, Sample) %>%
+  summarize(Abundance = sum(Abundance), .groups = "drop")%>% 
+  group_by(Class)
+
+# Summarizing
+Class_mean_all <- Class_mean_all %>%
+  group_by(Class) %>%
+  summarize(mean_abundance = mean(Abundance),
+            sd_abundance   = sd(Abundance, na.rm = TRUE),
+            n              = n(),                               
+            se_abundance   = sd(Abundance, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>% 
+  group_by(Class) 
+
+# Making sure abundances within each oiling × time sum 100%
+sum(Class_mean_all$mean_abundance)
+
+# Table for mean relative abundance of each Class overall:  
+Class_mean_all
+
+
+##### 9.5. Mixed effects models #####
+
+# Ranking abundances in long format
+
+# Collapse to one row per Sample x Class
+Class_abundance_collapsed <- Class_abundance %>%
+  group_by(Sample, Class) %>%
+  summarise(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop")
+
+# Merge metadata
+sample_meta_Class <- Class_abundance %>%
+  distinct(Sample, oiling_degree, time_days_categoric, sample_point)
+
+Class_abundance_collapsed <- Class_abundance_collapsed %>%
+  left_join(sample_meta_Class, by = "Sample")
+
+# Rank within each sample (lowest = 1, highest = max)
+Class_ranked_abundance <- Class_abundance_collapsed %>%
+  group_by(Sample) %>%
+  mutate(Abundance_rank = rank(Abundance, ties.method = "average")) %>%
+  ungroup() %>%
+  mutate(
+    sample_point = as.factor(sample_point),
+    time_days_categoric = as.factor(time_days_categoric),
+    oiling_degree = as.factor(oiling_degree),
+    Class = as.factor(Class))
+
+###### 9.5.1. Model Class x time x oiling ######
+
+# Fit the model
+model_ranked_Class <- nlme::lme(
+  Abundance_rank ~ Class * oiling_degree * time_days_categoric,
+  random = ~1 | sample_point/time_days_categoric,
+  data   = Class_ranked_abundance,
+  method = "REML")
+
+# ANOVA table
+anova(model_ranked_Class)
+
+
+###### 9.5.2. Pairwise comparisons ######
+
+# Among Classes overall
+pw_class_rank <- emmeans::emmeans(model_ranked_Class, pairwise ~ Class, adjust = "tukey")
+pw_class_rank <- pairs(pw_class_rank, adjust = "tukey")
+pw_class_rank <- as.data.frame(pw_class_rank)
+pw_class_rank_sig <- pw_class_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_rank_sig
+
+# Among Classes per time
+pw_class_ct_rank <- emmeans::emmeans(model_ranked_Class, pairwise ~ Class | time_days_categoric, adjust = "tukey")
+pw_class_ct_rank <- pairs(pw_class_ct_rank, adjust = "tukey")
+pw_class_ct_rank <- as.data.frame(pw_class_ct_rank)
+pw_class_ct_rank_sig <- pw_class_ct_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_ct_rank_sig
+
+# Among time points within each Class
+pw_class_tc_rank <- emmeans::emmeans(model_ranked_Class, pairwise ~ time_days_categoric | Class, adjust = "tukey")
+pw_class_tc_rank <- pairs(pw_class_tc_rank, adjust = "tukey")
+pw_class_tc_rank <- as.data.frame(pw_class_tc_rank)
+pw_class_tc_rank_sig <- pw_class_tc_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_tc_rank_sig
+
+# Among oiling degrees within each Class 
+pw_class_oc_rank <- emmeans::emmeans(model_ranked_Class, pairwise ~ oiling_degree | Class, adjust = "tukey")
+pw_class_oc_rank <- pairs(pw_class_oc_rank, adjust = "tukey")
+pw_class_oc_rank <- as.data.frame(pw_class_oc_rank)
+pw_class_oc_rank_sig <- pw_class_oc_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_oc_rank_sig 
+
+# Interaction: oiling differences within each Class at each time
+pw_class_o_by_ct_rank <- emmeans::emmeans(model_ranked_Class,
+                                          pairwise ~ oiling_degree | Class * time_days_categoric, adjust = "tukey")
+pw_class_o_by_ct_rank <- pairs(pw_class_o_by_ct_rank, adjust = "tukey")
+pw_class_o_by_ct_rank <- as.data.frame(pw_class_o_by_ct_rank)
+pw_class_o_by_ct_rank_sig <- pw_class_o_by_ct_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_o_by_ct_rank_sig
+
+# Interaction: time differences within each Class and oiling degree
+pw_class_t_by_co_rank <- emmeans::emmeans(model_ranked_Class,
+                                          pairwise ~ time_days_categoric | Class * oiling_degree, adjust = "tukey")
+pw_class_t_by_co_rank <- pairs(pw_class_t_by_co_rank, adjust = "tukey")
+pw_class_t_by_co_rank <- as.data.frame(pw_class_t_by_co_rank)
+pw_class_t_by_co_rank_sig <- pw_class_t_by_co_rank %>% dplyr::filter(p.value < 0.05)
+pw_class_t_by_co_rank_sig
+
+
+##### 9.6. Figure 4 #####
+
+# Top taxa from mean abundance table
+Class_mean_ot_top <- Class_mean_ot %>%
+  group_by(oiling_degree, time_days_categoric) %>%
+  mutate(
+    Class = ifelse(
+      row_number(desc(mean_abundance)) <= 6,
+      as.character(Class),
+      "Others")) %>%
+  ungroup() %>%
+  mutate(
+    Class = ifelse(is.na(Class) | Class == "", "Unassigned", Class),
+    oiling_degree = factor(oiling_degree, levels = c("Very_light", "Light")))
+
+# Sum after assigning low-abundance taxa to Others
+Class_mean_ot_top2 <- Class_mean_ot_top %>%
+  group_by(Class, oiling_degree, time_days_categoric) %>%
+  summarize(Abundance = sum(mean_abundance), .groups = "drop") %>%
+  complete(Class, time_days_categoric, oiling_degree, fill = list(Abundance = 0))
+
+# Colors
+marine_Class_colors <- c(
+  "Others" = "black",
+  "Unassigned" = "gray50",
+  "Dothideomycetes" = "#D53E4F",
+  "Eurotiomycetes" = "#FEE08B",
+  "Leotiomycetes" = "#3288BD",
+  "Rhizophydiomycetes" = "#FDAE61",
+  "Saccharomycetes" = "#5E4FA2",
+  "Sordariomycetes" = "#ABDDA4",
+  "Tremellomycetes" = "#E6F598",
+  "Wallemiomycetes" = "#66C2A5")
+
+# Reordering 
+Class_mean_ot_top2$Class <- factor(
+  Class_mean_ot_top2$Class,
+  levels = c("Unassigned", "Others",
+             unique(Class_mean_ot_top2$Class[!Class_mean_ot_top2$Class %in% c("Unassigned", "Others")])))
+
+
+# Alluvial plot
+figure4 <- ggplot(Class_mean_ot_top2, aes(alluvium = Class, x = time_days_categoric, stratum = Class, y = Abundance)) +
+  geom_alluvium(aes(fill = Class), color = "black", alpha = 1, size = 0.1, width = 1/10,
+                knot.pos = 1/4, curve_type = "xspline", decreasing = NA) +
+  facet_grid(. ~ oiling_degree,
+             labeller = as_labeller(c("Light" = "Light oiling", "Very_light" = "Very light oiling"))) +
+  scale_fill_manual(values = marine_Class_colors) +
+  theme_bw() +
+  xlab("Time after oil spill") +
+  scale_x_discrete(limits = c("18d", "34d", "49d", "66d")) +
+  labs(y = "Mean relative abundance (%)", fill = "Class") +
+  geom_segment(aes(x = "34d", xend = "34d", y = 0, yend = 100),
+               linetype = "dashed", color = "black", size = 0.05) +
+  geom_segment(aes(x = "49d", xend = "49d", y = 0, yend = 100),
+               linetype = "dashed", color = "black", size = 0.05) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.title = element_text(size = 11, face = "bold"),
+    axis.text.y = element_text(size = 8),
+    axis.text.x = element_text(size = 11),
+    legend.text = element_text(size = 9),
+    legend.title = element_text(size = 11, face = "bold"),
+    strip.text.x = element_text(size = 11, color = "black", face = "bold"),
+    strip.background = element_blank(),
+    legend.key.size = unit(0.35, "cm"))
+
+plot(figure4)
+
+#### 10. Relative abundance of genera #####
 
 
 # Relative abundance for each OTU at each sample
@@ -454,14 +1000,14 @@ Genus_abundance <- marine_physeq_rar %>%
   mutate(Genus = ifelse(is.na(Genus), "Unassigned", Genus)) %>% 
   select(Sample, Genus, Abundance, oiling_degree, time_days_categoric, sample_point)
 
-# Make sure each samples sum 100%
+# Make sure each sample sum 100%
 Genus_abundance %>%
   group_by(Sample) %>%
   summarize(total_abundance = sum(Abundance)) %>%
   arrange(desc(abs(total_abundance - 1)))
 
 
-##### 8.1. Per oiling degree #####
+##### 10.1. Per oiling degree #####
 # Mean relative abundance of each genus per oiling degree
 
 # Sum relative abundances of all the OTUs of the same Genus in each sample for each oiling 
@@ -490,10 +1036,10 @@ Genus_mean_o %>%
 Genus_mean_o
 
 
-##### 8.2. Per time #####
+##### 10.2. Per time #####
 # Mean relative abundance of each genus per time
 
-# sum relative abundances of all the OTUs of the same Genus in each sample for each oiling × time
+# Sum relative abundances of all the OTUs of the same Genus in each sample for each time
 Genus_mean_t <- Genus_abundance %>%  
   group_by(Genus, Sample, time_days_categoric) %>%
   summarize(Abundance = sum(Abundance), .groups = "drop") %>% 
@@ -519,7 +1065,7 @@ Genus_mean_t %>%
 Genus_mean_t
 
 
-##### 8.3. Per oiling x time #####
+##### 10.3. Per oiling x time #####
 # Mean relative abundance of each genus per oiling degree x time
 
 # Sum relative abundances of all the OTUs of the same Genus in each sample for each oiling × time
@@ -548,7 +1094,7 @@ Genus_mean_ot %>%
 Genus_mean_ot
 
 
-##### 8.4. Mixed effects models #####
+##### 10.4. Mixed effects models #####
 
 # Use Genus_abundance
 length(unique(Genus_abundance$Genus)) # Number of genera
@@ -578,7 +1124,7 @@ Genus_ranked_abundance <- Genus_abundance_collapsed %>%
          Genus         = as.factor(Genus))
 
 
-###### 8.4.1. Model Genus x time x oiling ######
+###### 10.4.1. Model Genus x time x oiling ######
 
 # Fit the model
 model_ranked_Genus <- nlme::lme(
@@ -587,11 +1133,11 @@ model_ranked_Genus <- nlme::lme(
   data   = Genus_ranked_abundance,
   method = "REML")
 
-## 4) ANOVA table
+## ANOVA table
 anova(model_ranked_Genus)
 
 
-###### 8.4.2. Pairwise comparisons ######
+###### 10.4.2. Pairwise comparisons ######
 
 # Among time within each genus 
 pw_genus_t <- emmeans::emmeans(model_ranked_Genus, pairwise ~ time_days_categoric | Genus, adjust = "tukey")
@@ -616,7 +1162,7 @@ pw_genus_o_by_t_sig <- pw_genus_o_by_t %>% filter(p.value < 0.05)
 pw_genus_o_by_t_sig
 
 
-##### 8.5. Figure 4 #####
+##### 10.5. Figure 5 #####
 
 # Select the genera and set factor orders
 Genus_sel <- Genus_mean_ot %>%
@@ -641,7 +1187,7 @@ limits_df <- tibble::tibble(Genus = c(g_max15, g_max5),
 
 pd <- position_dodge(width = 0.25)
 
-Figure4 <- ggplot(Genus_sel, aes(x = time_days_categoric, y = mean_abundance,
+Figure5 <- ggplot(Genus_sel, aes(x = time_days_categoric, y = mean_abundance,
                                  group = oiling_degree, shape = oiling_degree, linetype = oiling_degree)) +
   geom_blank(data = distinct(limits_df, Genus, time_days_categoric) %>% 
       mutate(y0 = 0), inherit.aes = FALSE, aes(x = time_days_categoric, y = y0, Genus = Genus)) +
@@ -679,12 +1225,12 @@ Figure4 <- ggplot(Genus_sel, aes(x = time_days_categoric, y = mean_abundance,
     legend.margin    = margin(t = -5, b = 5),
     legend.box.margin= margin(b = -13))
 
-plot(Figure4)
+plot(Figure5)
 
 
 
 
-#### 9. Indicator species ####
+#### 11. Indicator species ####
 
 # Extract abundance data from the phyloseq object and transpose it
 otu_df_indic <- as.data.frame(t(otu_table(marine_physeq_rar)))
@@ -703,14 +1249,14 @@ otu_df_indic$sample_type
 multipatt_data <- otu_df_indic %>%
   select(-sample_type)
 
-##### 9.1. Multipatt analysis #####
+##### 11.1. Multipatt analysis #####
 
 set.seed(500)
 indicator_otus <- multipatt(multipatt_data, otu_df_indic$sample_type, control = how(nperm=999), duleg=T)
 summary(indicator_otus, indvalcomp=T, alpha=0.05)
 
 
-##### 9.2. Identity of indicator OTUs ####
+##### 11.2. Identity of indicator OTUs ####
 
 # Extract per-OTU results
 sig_tbl <- indicator_otus$sign %>%
@@ -763,7 +1309,7 @@ indicator_otus_table
 
 
 
-#### 10. FIGURES ARTICLE ####
+#### 12. FIGURES ARTICLE ####
 
 
 ##### Figure 2 #####
@@ -772,17 +1318,29 @@ Figure2 <-ggarrange(Figure2A,Figure2B,
           nrow=1,ncol=2,common.legend = T,
           labels=c("A","B"), font.label = list(size = 10))
 
-ggsave("Figure2.tiff", plot = Figure2, units = "in", 
-       height = 3, width = 7, dpi=600)
+ggsave("Fig.2.tiff", plot = Figure2, units = "in", 
+       height = 3, width = 7, dpi=1200)
 
 
 ##### Figure 3 #####
 
-ggsave("Figure3.tiff", plot = Figure3, units = "in", 
-       height = 3, width = 3.3, dpi=600)
+ggsave("Fig.3.tiff", plot = Figure3, units = "in", 
+       height = 3, width = 3.3, dpi=1200)
 
 
-##### Figure 4 #####
+##### Figure S1 #####
 
-ggsave("Figure4.tiff", plot = Figure4, units = "in", 
-       height = 4.5, width = 6, dpi = 600)
+ggsave("Fig.4.tiff", plot = figure4, units = "in", 
+       height = 3, width = 7, dpi = 1200)
+
+
+##### Figure 5 #####
+
+ggsave("Fig.5.tiff", plot = Figure4, units = "in", 
+       height = 4.5, width = 6, dpi = 1200)
+
+
+##### Figure S1 #####
+
+ggsave("Fig.S1.tiff", plot = figureS1, units = "in", 
+       height = 3, width = 7, dpi = 1200)

@@ -564,7 +564,7 @@ plot(bco_pon)
 
 #### 7. FIGURE ARTICLE ####
 
-##### Figure 4 #####
+##### Figure 6 #####
 
 # Modify border
 lock_border <- theme(
@@ -593,5 +593,5 @@ ggarrange(cuti_plotB,beuti_plotB,
           common.legend = T,               
           legend = "top")
 
-ggsave("Figure5.tiff", last_plot(), width = 7, height = 9, dpi = 600)
+ggsave("Figure6.tiff", last_plot(), width = 7, height = 9, dpi = 600)
 
